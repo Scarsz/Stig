@@ -1,0 +1,61 @@
+<!doctype html>
+<head>
+    <title>Stig</title>
+    <script type="application/javascript" src="https://cdn.jsdelivr.net/npm/jquery@3.3.1/dist/jquery.min.js"></script>
+    <script type="application/javascript" src="https://cdn.jsdelivr.net/gh/ricmoo/aes-js@e27b99dff787a143e59a3de473cab53e8375af36/index.js"></script>
+    <script type="application/javascript" src="https://cdn.jsdelivr.net/gh/beatgammit/base64-js@bf68aaa277d9de7007cc0c58279c411bb10670ac/base64js.min.js"></script>
+</head>
+<body>
+    <p id="creation" onmouseover="this.innerHTML='Created {{ created }}'" onmouseout="this.innerHTML='Created {{ created | timesince }}'">Created {{ created | timesince }}</p>
+    <script>
+        function decrypt(key, b64data) {
+            console.log("Decrypting " + b64data + " with data length ~" + base64js.byteLength(b64data));
+            const bytes = base64js.toByteArray(b64data);
+            const iv = bytes.subarray(0, 16);
+            const data = bytes.subarray(16);
+            console.log("Vector -> " + iv);
+            console.log("Data -> " + data);
+            const aes = new aesjs.ModeOfOperation.cbc(key, iv);
+            const decrypted = aes.decrypt(data);
+            const unPadded = decrypted.subarray(0, decrypted.byteLength - decrypted[decrypted.byteLength - 1]);
+            console.log("Decrypted -> " + unPadded);
+            const decoded = aesjs.utils.utf8.fromBytes(unPadded);
+            console.log("Decoded -> " + decoded);
+            return decoded;
+        }
+
+        $(window).on('load', function() {
+            let key = window.location ? window.location.hash.replace("#", "") : null;
+            while (key == null || key.match(/^[A-z0-9]{16}$/g) == null) {
+                let given = prompt("Please input the decryption key for this paste\n\n" +
+                    "If you do not know the key, ask the creator of this link for it.\n" +
+                    "If the key has been lost, it is not recoverable. All pastes are stored in such a way that not even the creators could see them if they tried.");
+                if (given == null) {
+                    document.location = "/";
+                    throw new Error("User failed to provide decryption key");
+                }
+                if (!given.match(/^[A-z0-9]{16}$/g)) {
+                    alert("Invalid key!\n\nDecryption keys are 16 alphanumeric characters.")
+                } else {
+                    key = given;
+                }
+            }
+
+            const keyBytes = Uint8Array.from(encodeURIComponent(key).replace(/%(..)/g,(m,v)=>{return String.fromCodePoint(parseInt(v,16))}), c=>c.codePointAt(0));
+            console.log("Using decryption key: " + keyBytes);
+            console.log("");
+            const encryptedFiles = JSON.parse('{{ files | tojson }}');
+            const files = [];
+            encryptedFiles.forEach(function(file) {
+                const name = decrypt(keyBytes, file["name"]);
+                console.log("");
+                const data = decrypt(keyBytes, file["data"]);
+                console.log("");
+                files.push({name, data});
+            });
+            console.log("Successfully decrypted all files [" + files.length + "]: " + files.map(f => f["name"] + " = " + f["data"]));
+
+            $("body").append($("<pre></pre>").text(JSON.stringify(files)));
+        });
+    </script>
+</body>
